@@ -1,0 +1,509 @@
+// FinEd Expense Tracker Database Schema
+// Database Markup Language (DBML)
+// Use at: https://dbdiagram.io
+// Version: 4.0
+// Architecture: Offline-Only, Privacy-First
+
+Project FinEd {
+  database_type: 'SQLite'
+  Note: '''
+    # FinEd - Personal Financial Management App
+    - 100% Offline Operation
+    - Privacy-First Architecture
+    - All data stored locally in SQLite
+    - No cloud services or external dependencies
+  '''
+}
+
+// ============================================
+// CORE TABLES
+// ============================================
+
+Table users {
+  id integer [pk, increment, note: 'Unique user identifier (typically 1 in offline mode)']
+  email text [unique, not null, note: 'User email (local only, no verification)']
+  name text [not null, note: 'User display name']
+  profile_image text [null, note: 'Profile image path or URL']
+  created_at text [not null, default: `datetime('now')`, note: 'Account creation timestamp (ISO 8601)']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last update timestamp']
+  
+  Note: 'Stores local user profile. Single-user app typically has only one record.'
+}
+
+Table categories {
+  id integer [pk, increment, note: 'Unique category identifier']
+  name text [not null, unique, note: 'Category name with emoji (e.g., "🍕 Food & Dining")']
+  icon text [null, note: 'Emoji or icon representation']
+  color text [null, note: 'Hex color code (e.g., "#FF6B6B")']
+  type text [not null, note: 'Category type: "income" or "expense"']
+  is_default integer [not null, default: 0, note: '1 = system default, 0 = user-created']
+  created_at text [not null, default: `datetime('now')`, note: 'Creation timestamp']
+  
+  indexes {
+    type [name: 'idx_categories_type']
+    name [name: 'idx_categories_name']
+  }
+  
+  Note: '''
+    Predefined categories:
+    - Expenses: Food & Dining, Transportation, Shopping, Housing, Healthcare, Entertainment, Education, etc.
+    - Income: Salary, Allowance, Bonus, Investment Return, Freelance, etc.
+  '''
+}
+
+Table transactions {
+  id integer [pk, increment, note: 'Unique transaction identifier']
+  category text [not null, note: 'Category name (denormalized for performance)']
+  amount real [not null, note: 'Negative for expenses, positive for income']
+  date text [not null, note: 'Transaction date (ISO 8601: YYYY-MM-DD)']
+  time text [not null, note: 'Transaction time (HH:MM format)']
+  asset text [not null, note: 'Payment method: Cash, Card, Bank Transfer, etc.']
+  ledger text [not null, note: 'Account ledger: Personal, Work, Business, Family']
+  remark text [null, note: 'Optional note or description']
+  type text [not null, note: 'Transaction type: "income" or "expense"']
+  created_at text [not null, default: `datetime('now')`, note: 'Record creation timestamp']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last modification timestamp']
+  
+  indexes {
+    date [name: 'idx_transactions_date']
+    type [name: 'idx_transactions_type']
+    category [name: 'idx_transactions_category']
+    (date, type) [name: 'idx_transactions_date_type']
+  }
+  
+  Note: '''
+    Core transaction table storing all income and expenses.
+    - Income: positive amounts
+    - Expenses: negative amounts
+    - Auto-triggers balance recalculation on insert/update/delete
+  '''
+}
+
+Table settings {
+  id integer [pk, increment]
+  key text [not null, unique, note: 'Setting key identifier']
+  value text [not null, note: 'JSON-encoded setting value']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last update timestamp']
+  
+  indexes {
+    key [name: 'idx_settings_key', unique]
+  }
+  
+  Note: '''
+    Key-value store for app preferences:
+    - theme: "light", "dark", "system"
+    - language: "English", "Thai", "Chinese", "Japanese"
+    - currency: "Thai Baht (฿)", "US Dollar ($)", etc.
+    - monthly_start_date: 1-31
+    - daily_reminder: true/false
+    - spending_alerts: true/false
+    - full_name, university, monthly_allowance, etc.
+  '''
+}
+
+// ============================================
+// FINANCIAL MANAGEMENT TABLES
+// ============================================
+
+Table balances {
+  id integer [pk, increment]
+  type text [not null, unique, note: 'Balance type: "current", "emergency", or "investment"']
+  amount real [not null, default: 0.0, note: 'Current balance amount']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last recalculation timestamp']
+  
+  indexes {
+    type [name: 'idx_balances_type', unique]
+  }
+  
+  Note: '''
+    Three balance types:
+    - current: Day-to-day spending balance (calculated from all transactions)
+    - emergency: Emergency fund allocation
+    - investment: Total investment portfolio value
+  '''
+}
+
+Table budgets {
+  id integer [pk, increment]
+  type text [not null, note: 'Budget period: "weekly", "monthly", or "yearly"']
+  amount real [not null, note: 'Budget limit amount']
+  spent real [default: 0, note: 'Amount spent in current period (auto-calculated)']
+  category text [null, note: 'Optional category-specific budget']
+  created_at text [not null, default: `datetime('now')`, note: 'Budget creation timestamp']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last update timestamp']
+  
+  indexes {
+    type [name: 'idx_budgets_type']
+    (type, category) [name: 'idx_budgets_type_category']
+  }
+  
+  Note: '''
+    Budget management with status calculation:
+    - Good: spent < 80% of amount
+    - Warning: 80% ≤ spent < 100%
+    - Over Budget: spent ≥ 100%
+  '''
+}
+
+Table financial_goals {
+  id integer [pk, increment]
+  title text [not null, note: 'Goal name or description']
+  target_amount real [not null, note: 'Target savings amount']
+  current_amount real [default: 0, note: 'Current progress towards goal']
+  target_date text [null, note: 'Target completion date (ISO 8601)']
+  category text [null, note: 'Goal category (e.g., Emergency, Vacation, Education)']
+  priority integer [default: 1, note: 'Priority level: 1 (highest) to 5 (lowest)']
+  status text [default: 'active', note: 'Goal status: "active", "completed", "cancelled"']
+  created_at text [not null, default: `datetime('now')`, note: 'Goal creation timestamp']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last update timestamp']
+  
+  indexes {
+    status [name: 'idx_goals_status']
+    priority [name: 'idx_goals_priority']
+    target_date [name: 'idx_goals_target_date']
+  }
+  
+  Note: '''
+    Financial goals tracking with progress monitoring.
+    Progress = (current_amount / target_amount) × 100%
+  '''
+}
+
+// ============================================
+// ASSET & LIABILITY TABLES
+// ============================================
+
+Table assets {
+  id integer [pk, increment]
+  name text [not null, note: 'Asset name (e.g., "House", "Car", "Laptop")']
+  amount real [not null, note: 'Current asset value']
+  category text [not null, note: 'Asset category (Real Estate, Vehicle, Electronics, etc.)']
+  color text [not null, note: 'Display color (hex code)']
+  created_at text [not null, default: `datetime('now')`, note: 'Record creation timestamp']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last value update timestamp']
+  
+  indexes {
+    category [name: 'idx_assets_category']
+  }
+  
+  Note: '''
+    Tracks user assets for net worth calculation.
+    Categories: Real Estate, Vehicles, Electronics, Financial, Personal, Digital
+  '''
+}
+
+Table liabilities {
+  id integer [pk, increment]
+  name text [not null, note: 'Liability name (e.g., "Mortgage", "Credit Card", "Student Loan")']
+  amount real [not null, note: 'Outstanding amount owed']
+  category text [not null, note: 'Liability category (Loan, Credit, Debt, etc.)']
+  color text [not null, note: 'Display color (hex code)']
+  created_at text [not null, default: `datetime('now')`, note: 'Record creation timestamp']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last amount update timestamp']
+  
+  indexes {
+    category [name: 'idx_liabilities_category']
+  }
+  
+  Note: '''
+    Tracks debts and financial obligations.
+    Net Worth = Total Assets - Total Liabilities
+  '''
+}
+
+// ============================================
+// ADVANCED FEATURES TABLES
+// ============================================
+
+Table recurring_transactions {
+  id integer [pk, increment]
+  title text [not null, note: 'Recurring transaction title']
+  amount real [not null, note: 'Transaction amount (negative for expenses)']
+  category text [not null, note: 'Category name']
+  frequency text [not null, note: 'Recurrence frequency: daily, weekly, monthly, yearly']
+  next_due_date text [not null, note: 'Next occurrence date (ISO 8601)']
+  is_active integer [default: 1, note: '1 = active, 0 = paused']
+  created_at text [not null, default: `datetime('now')`, note: 'Creation timestamp']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last update timestamp']
+  
+  indexes {
+    next_due_date [name: 'idx_recurring_next_due']
+    is_active [name: 'idx_recurring_active']
+  }
+  
+  Note: '''
+    Scheduled recurring transactions (bills, salary, subscriptions).
+    Auto-creates transactions on due date.
+  '''
+}
+
+Table investments {
+  id integer [pk, increment]
+  name text [not null, note: 'Investment name (e.g., "Apple Inc.", "Government Bond")']
+  type text [not null, note: 'Investment type: Stocks, Bonds, Mutual Fund, ETF, Crypto, Real Estate']
+  symbol text [null, note: 'Stock ticker symbol (e.g., "AAPL")']
+  quantity real [not null, note: 'Number of shares or units owned']
+  purchase_price real [not null, note: 'Purchase price per unit']
+  current_price real [null, note: 'Current market price per unit (manual update)']
+  purchase_date text [not null, note: 'Purchase date (ISO 8601)']
+  created_at text [not null, default: `datetime('now')`, note: 'Record creation timestamp']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last update timestamp']
+  
+  indexes {
+    type [name: 'idx_investments_type']
+    purchase_date [name: 'idx_investments_purchase_date']
+  }
+  
+  Note: '''
+    Investment portfolio tracking.
+    Total Value = quantity × (current_price OR purchase_price)
+  '''
+}
+
+Table emergency_funds {
+  id integer [pk, increment]
+  name text [not null, note: 'Emergency fund name (e.g., "Medical Emergency", "Job Loss Fund")']
+  target_amount real [not null, note: 'Target fund amount']
+  current_amount real [default: 0, note: 'Current saved amount']
+  priority integer [default: 1, note: 'Priority level (1 = highest)']
+  created_at text [not null, default: `datetime('now')`, note: 'Fund creation timestamp']
+  updated_at text [not null, default: `datetime('now')`, note: 'Last update timestamp']
+  
+  indexes {
+    priority [name: 'idx_emergency_priority']
+  }
+  
+  Note: '''
+    Emergency fund allocations by scenario.
+    Total Emergency Balance = SUM(current_amount)
+  '''
+}
+
+// ============================================
+// RELATIONSHIPS (Logical, Not Enforced)
+// ============================================
+
+// Note: The actual implementation uses a denormalized schema
+// without foreign key constraints for performance optimization.
+// The relationships below are LOGICAL only.
+
+// Ref: transactions.category - categories.name [note: 'Logical reference by name (TEXT), not FK']
+// Ref: budgets.category - categories.name [note: 'Logical reference by name (TEXT), not FK']
+// Ref: recurring_transactions.category - categories.name [note: 'Logical reference by name (TEXT), not FK']
+
+// ============================================
+// TABLE GROUPS
+// ============================================
+
+TableGroup core_tables {
+  users
+  categories
+  transactions
+  settings
+  
+  Note: 'Core application tables required for basic operation'
+}
+
+TableGroup financial_management {
+  balances
+  budgets
+  financial_goals
+  
+  Note: 'Financial planning and budget management tables'
+}
+
+TableGroup asset_tracking {
+  assets
+  liabilities
+  
+  Note: 'Net worth tracking tables'
+}
+
+TableGroup advanced_features {
+  recurring_transactions
+  investments
+  emergency_funds
+  
+  Note: 'Advanced financial management features'
+}
+
+// ============================================
+// ENUMS (For Documentation)
+// ============================================
+
+Enum transaction_type {
+  income [note: 'Money received']
+  expense [note: 'Money spent']
+}
+
+Enum category_type {
+  income [note: 'Income category']
+  expense [note: 'Expense category']
+}
+
+Enum budget_type {
+  weekly [note: 'Sunday to Saturday']
+  monthly [note: '1st to last day of month']
+  yearly [note: 'January 1 to December 31']
+}
+
+Enum balance_type {
+  current [note: 'Day-to-day spending balance']
+  emergency [note: 'Emergency fund allocation']
+  investment [note: 'Total investment portfolio value']
+}
+
+Enum goal_status {
+  active [note: 'Currently pursuing']
+  completed [note: 'Goal achieved']
+  cancelled [note: 'Goal abandoned']
+}
+
+Enum investment_type {
+  Stocks [note: 'Stock market equities']
+  Bonds [note: 'Government or corporate bonds']
+  "Mutual Fund" [note: 'Mutual fund investments']
+  ETF [note: 'Exchange-traded funds']
+  Crypto [note: 'Cryptocurrency']
+  "Real Estate" [note: 'Property investments']
+  Other [note: 'Other investment types']
+}
+
+Enum recurring_frequency {
+  daily [note: 'Every day']
+  weekly [note: 'Every 7 days']
+  biweekly [note: 'Every 14 days']
+  monthly [note: 'Every month on same date']
+  quarterly [note: 'Every 3 months']
+  yearly [note: 'Every year on same date']
+}
+
+Enum asset_type {
+  Cash [note: 'Physical cash']
+  "Bank Transfer" [note: 'Bank account transfer']
+  "Credit Card" [note: 'Credit card payment']
+  "Debit Card" [note: 'Debit card payment']
+  "Digital Wallet" [note: 'PayPal, PromptPay, Venmo, etc.']
+  Check [note: 'Paper check']
+}
+
+Enum ledger_type {
+  Personal [note: 'Personal account']
+  Work [note: 'Work-related account']
+  Business [note: 'Business account']
+  Family [note: 'Family shared account']
+}
+
+// ============================================
+// SAMPLE DATA & DEFAULT VALUES
+// ============================================
+
+// Default categories inserted on database creation
+// INSERT INTO categories (name, icon, color, type, is_default) VALUES
+//   ('🍕 Food & Dining', '🍕', '#FF6B6B', 'expense', 1),
+//   ('🚗 Transportation', '🚗', '#4ECDC4', 'expense', 1),
+//   ('🛍️ Shopping', '🛍️', '#45B7D1', 'expense', 1),
+//   ('🏠 Housing', '🏠', '#96CEB4', 'expense', 1),
+//   ('💊 Healthcare', '💊', '#F78FB3', 'expense', 1),
+//   ('🎮 Entertainment', '🎮', '#FFD93D', 'expense', 1),
+//   ('📚 Education', '📚', '#6BCB77', 'expense', 1),
+//   ('⚡ Utilities', '⚡', '#4D96FF', 'expense', 1),
+//   ('💼 Salary', '💼', '#FFEAA7', 'income', 1),
+//   ('🎁 Allowance', '🎁', '#DDA0DD', 'income', 1),
+//   ('📈 Investment Return', '📈', '#55EFC4', 'income', 1);
+
+// Default balances initialized
+// INSERT INTO balances (type, amount, updated_at) VALUES
+//   ('current', 0.0, datetime('now')),
+//   ('emergency', 0.0, datetime('now')),
+//   ('investment', 0.0, datetime('now'));
+
+// ============================================
+// CALCULATED FIELDS & BUSINESS LOGIC
+// ============================================
+
+// Current Balance Calculation:
+// SELECT SUM(amount) FROM transactions WHERE type IN ('income', 'expense')
+
+// Monthly Spending:
+// SELECT SUM(ABS(amount)) FROM transactions 
+// WHERE type = 'expense' 
+//   AND date >= date('now', 'start of month')
+
+// Budget Status:
+// CASE
+//   WHEN spent >= amount THEN 'over_budget'
+//   WHEN spent >= amount * 0.8 THEN 'warning'
+//   ELSE 'good'
+// END
+
+// Net Worth:
+// (SELECT SUM(amount) FROM assets) - (SELECT SUM(amount) FROM liabilities)
+
+// Investment Portfolio Value:
+// SELECT SUM(quantity * COALESCE(current_price, purchase_price)) FROM investments
+
+// Goal Progress:
+// (current_amount / target_amount) × 100%
+
+// ============================================
+// DATABASE METADATA
+// ============================================
+
+// Database: expense_tracker.db
+// Version: 4
+// Size: ~500KB to 5MB (typical usage)
+// Tables: 12
+// Design: Denormalized for offline performance
+// Privacy: 100% local storage, no cloud sync
+// Platform: Android & iOS (Flutter/SQLite)
+
+// Schema Evolution:
+// v1: transactions, categories, settings, balances
+// v2: + assets, liabilities
+// v3: + budgets
+// v4: + users, financial_goals, recurring_transactions, investments, emergency_funds
+
+// ============================================
+// PERFORMANCE NOTES
+// ============================================
+
+// Indexes created for optimal query performance:
+// - All primary keys auto-indexed
+// - Foreign key columns indexed
+// - Date columns indexed (DESC for recent-first)
+// - Frequently queried fields indexed
+// - Composite indexes for common JOIN patterns
+
+// Query Performance Targets:
+// - Transaction insert: < 50ms
+// - Balance calculation: < 200ms
+// - Monthly report: < 100ms
+// - Budget status check: < 50ms
+
+// ============================================
+// PRIVACY & SECURITY
+// ============================================
+
+// Data Storage:
+// - Android: /data/data/com.fined.expense_tracker/databases/
+// - iOS: Library/Application Support/databases/
+
+// Privacy Features:
+// ✓ 100% offline operation
+// ✓ No external API calls
+// ✓ No user authentication required
+// ✓ No cloud synchronization
+// ✓ Complete user data control
+// ✓ App-sandboxed database (OS-level protection)
+
+// Future Security Enhancements:
+// - SQLCipher for database encryption
+// - Biometric lock (fingerprint/Face ID)
+// - PIN protection
+// - Auto-lock on inactivity
+
+// ============================================
+// END OF SCHEMA
+// ============================================
+

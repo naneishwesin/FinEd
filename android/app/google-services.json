@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "880061436128",
+    "project_id": "expense-budget-fined-project",
+    "storage_bucket": "expense-budget-fined-project.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:880061436128:android:246e619e95c11053208085",
+        "android_client_info": {
+          "package_name": "com.FinEd_expense_tracker.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAwHoLeTOieK98ENYQwWfqKLRFZp6TtOM8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
